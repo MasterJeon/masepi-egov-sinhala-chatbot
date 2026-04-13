@@ -1,0 +1,63 @@
+# ----------------------
+# Python
+# ----------------------
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*.egg-info/
+dist/
+build/
+
+# Virtual environment
+venv/
+env/
+.venv/
+
+# ----------------------
+# Streamlit
+# ----------------------
+.streamlit/secrets.toml
+
+# ----------------------
+# Environment variables
+# ----------------------
+.env
+
+# ----------------------
+# IDE / Editor
+# ----------------------
+.vscode/
+.idea/
+*.swp
+
+# ----------------------
+# OS files
+# ----------------------
+.DS_Store
+Thumbs.db
+
+# ----------------------
+# Logs
+# ----------------------
+*.log
+
+# ----------------------
+# Data files 
+# ----------------------
+# Uncomment if you DON'T want to upload your dataset
+# data/
+
+# ----------------------
+# Ollama / Models (VERY IMPORTANT)
+# ----------------------
+# Never upload models
+*.gguf
+*.bin
+
+# ----------------------
+# Temporary files
+# ----------------------
+*.tmp
+*.cache
