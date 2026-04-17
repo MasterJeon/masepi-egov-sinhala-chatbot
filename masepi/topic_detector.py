@@ -54,7 +54,17 @@ def detect_topic(user_input: str) -> str:
 
     # Score each topic by how many keywords appear
     scores = {topic: 0 for topic in TOPIC_KEYWORDS}
+    # First pass: Look for highly specific exact matches
+    if "හැඳුනුම්පත" in user_lower or "nic" in user_lower:
+        return "nic"
+    if "ගමන් බලපත්‍රය" in user_lower or "passport" in user_lower:
+        return "passport"
+    if "රියදුරු බලපත්‍රය" in user_lower or "driving license" in user_lower:
+        return "driving_license"
+    if "උප්පැන්න සහතිකය" in user_lower or "birth certificate" in user_lower:
+        return "birth_certificate"
 
+    # Second pass: General keyword counting (fallback)
     for topic, keywords in TOPIC_KEYWORDS.items():
         for keyword in keywords:
             if keyword.lower() in user_lower:
