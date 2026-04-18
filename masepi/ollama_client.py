@@ -75,7 +75,7 @@ def generate_response(messages: list, model: str = None) -> str:
         "options": {
             "temperature": 0.0,    # Zero creativity — facts only
             "top_p": 1.0,
-            "num_predict": 400,
+            "num_predict": 1024,
             "repeat_penalty": 1.1  # Prevents repetition (fixes Q4-style bug)
         }
     }

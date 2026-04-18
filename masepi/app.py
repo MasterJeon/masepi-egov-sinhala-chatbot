@@ -11,7 +11,7 @@ from ollama_client import check_ollama_running, generate_with_fallback, get_avai
 
 # ── Page config — MUST be first Streamlit call ──────────
 st.set_page_config(
-    page_title="Masepi — සිංහල රජය සේවා",
+    page_title="Masepi - සිංහල රාජ්‍ය සේවා",
     page_icon="🇱🇰",
     layout="centered",
     initial_sidebar_state="expanded"
@@ -130,7 +130,7 @@ with st.sidebar:
 # ── Main Chat Area ───────────────────────────────────────
 st.title("🇱🇰 මා.සේ.පී")
 st.markdown(
-    "<p class='sinhala-text' style='color: #666; font-size: 18px; margin-top: -15px; margin-bottom: 20px;'>රජයේ සේවා සඳහා ඔබේ සිංහල ඩිජිටල් මඟපෙන්වන්නා</p>",
+    "<p class='sinhala-text' style='color: #666; font-size: 18px; margin-top: -15px; margin-bottom: 20px;'>රජයේ සේවා සඳහා ඔබේ හල ඩිජිටල් මඟපෙන්වන්නා</p>",
     unsafe_allow_html=True
 )
 
@@ -157,7 +157,7 @@ for msg in st.session_state.messages:
 
 
 # ── Handle user input ────────────────────────────────────
-if prompt := st.chat_input("ඔබේ ප්‍රශ්නය සිංහලෙන් ටයිප් කරන්න..."):
+if prompt := st.chat_input("ඔබේ ප්‍රශ්නය හලෙන් ටයිප් කරන්න..."):
 
     # Verify Ollama is up before proceeding
     if not get_ollama_status():
