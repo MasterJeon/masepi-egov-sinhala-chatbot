@@ -1,121 +1,73 @@
 # prompt_builder.py
-# -------------------------------------------------------
-# PURPOSE: Construct a well-structured prompt for Ollama
-#          that reliably produces Sinhala responses.
-#
-# NLP CONCEPT: PROMPT ENGINEERING
-# The LLM doesn't "know" it should respond in Sinhala
-# unless you tell it clearly and repeatedly. 
-# Key techniques used here:
-#   1. System prompt (sets the persona and rules)
-#   2. Context injection (RAG output goes here)
-#   3. Explicit language instruction (MUST respond in Sinhala)
-#   4. Few-shot examples (optional, but improves consistency)
-#   5. Chat history inclusion (for memory)
-#   6. Clear formatting of the final question
-# -------------------------------------------------------
-
-
-#def build_system_prompt() -> str:
-#    """
-#    The system prompt runs ONCE at the start of every request.
-#    It tells the model WHO it is and HOW it must behave.
-
-#    KEY INSIGHT: Repeating "Sinhala" multiple times is
- #   intentional — LLMs respond to emphasis. One mention
- #   is often ignored, especially for non-English languages.
- #   """
- #   return """ඔබ "Masepi" — ශ්‍රී ලංකා රජයේ ලේඛන සේවා සඳහා විශේෂඥ සහකාරයෙකි.
-
-#ඔබේ ප්‍රධාන නීති:
-#1. ඔබ සෑම විටම සිංහල භාෂාවෙන් පමණක් පිළිතුරු දිය යුතුය.
-#2. ඔබ ශ්‍රී ලංකා රජයේ නිල ක්‍රියාපටිපාටි ගැන නිවැරදි තොරතුරු ලබා දිය යුතුය.
-#3. ඔබ ලබා දුන් සන්දර්භය (context) පදනම් කරගෙන පිළිතුරු දිය යුතුය.
-#4. ඔබ නොදන්නා දෙයක් ගැන ප්‍රශ්නයක් ඇසුවහොත්, "මට ඒ ගැන නිශ්චිත තොරතුරු නැත" යනුවෙන් සිංහලෙන් ඇහිව කියන්න.
-#5. ඔබ කිසිදු ඉංග්‍රීසි වචනයක් භාවිතා නොකළ යුතුය, හැකි සෑම විටම.
-#6. ඔබේ පිළිතුරු කෙටි, පැහැදිලි, හා ප්‍රයෝජනවත් විය යුතුය.
-
-#ඔබ "Masepi" — You are a Sri Lankan government services assistant. ALWAYS respond in Sinhala only."""
+# PURPOSE: Build structured prompts for the Ollama LLM.
+# The quality of answers depends almost entirely on prompt design.
 
 def build_system_prompt() -> str:
-    """
-    The system prompt runs ONCE at the start of every request.
-    """
-    return """System Role: Masepi - Sri Lankan Government Services Assistant.
+    return """You are 'Masepi', a highly accurate Sri Lankan Government Services Assistant.
+Your ONLY job is to answer the user's question using the provided CONTEXT.
 
-Rules:
-1. You MUST generate your final response entirely in the Sinhala language (සිංහල).
-2. NEVER output English translations unless explicitly requested.
-3. Base your answers ONLY on the provided context. If the answer is not in the context, say: "මට ඒ ගැන නිශ්චිත තොරතුරු නැත."
-4. Format your output clearly using bullet points if needed, but keep the text in Sinhala.
-
-සිංහල භාෂාවෙන් පමණක් පිළිතුරු සපයන්න."""
+CRITICAL RULES:
+1. You MUST write your final response ENTIRELY in Sinhala (සිංහල). Do not output any English words.
+2. Read the CONTEXT carefully. Extract the exact facts. Do not invent or guess information.
+3. If the answer is NOT explicitly written in the CONTEXT, you MUST reply with exactly this phrase and nothing else: "මට ඒ ගැන නිශ්චිත තොරතුරු නැත."
+4. FEES AND NUMBERS: Only state a fee or number if it is LITERALLY written in the CONTEXT. Copy it exactly. Do NOT use any fee from your training memory.
+5. If a question asks about something outside Sri Lankan government document services, reply only: "මට ඒ ගැන නිශ්චිත තොරතුරු නැත."
+6. Keep your Sinhala sentences short, professional, and grammatically correct. Do not cut off mid-sentence."""
 
 def build_prompt(user_query: str, context: str, chat_history: list) -> list:
     """
-    Builds the full message list to send to Ollama.
-
-    Args:
-        user_query: The current Sinhala question from the user
-        context: Retrieved knowledge base text (from retriever.py)
-        chat_history: List of {"role": "user"/"assistant", "content": "..."} dicts
-
-    Returns:
-        A list of message dicts in Ollama chat format
-
-    WHY THIS FORMAT?
-    Ollama's /api/chat endpoint uses the same format as OpenAI:
-    a list of {"role": ..., "content": ...} messages.
-    This lets the model see the full conversation history,
-    which is what gives it "memory" within a session.
+    Builds the Ollama /api/chat message list.
+    Structure: [system] → [recent history] → [context + question]
     """
-
     messages = []
 
-    # 1. System message — sets the model's persona
-    system_content = build_system_prompt()
     messages.append({
         "role": "system",
-        "content": system_content
+        "content": build_system_prompt()
     })
 
-    # 2. Include recent chat history (last 6 turns = 3 exchanges)
-    # WHY LIMIT? Sending too much history wastes tokens and
-    # can confuse the model. 3 exchanges is usually enough
-    # for conversational context.
-    recent_history = chat_history[-6:] if len(chat_history) > 6 else chat_history
-    for message in recent_history:
-        messages.append(message)
+    # Last 3 exchanges = 6 messages.
+    # Too much history makes the model forget its rules.
+    recent = chat_history[-6:] if len(chat_history) > 6 else chat_history
+    for msg in recent:
+        messages.append(msg)
 
-    # 3. Build the current user turn with context injected
-    # This is the core of RAG: we prepend the retrieved
-    # knowledge to the user's actual question.
-    user_message_content = f"""පහත සන්දර්භය (context) භාවිතා කරමින් ප්‍රශ්නයට සිංහලෙන් පිළිතුරු දෙන්න:
+    # Reading-comprehension format: CONTEXT → QUESTION → ANSWER IN SINHALA
+    # This is the most reliable format for fact extraction from LLaMA 3.1.
+    # The "SINHALA ANSWER:" suffix acts as a strong completion cue.
 
---- සන්දර්භය (Context) ---
-{context}
---- සන්දර්භය අවසන් ---
 
-පරිශීලකයාගේ ප්‍රශ්නය: {user_query}
+    # Reading-comprehension format: CONTEXT → QUESTION → ANSWER IN SINHALA
+    user_content = f"""CONTEXT (answer ONLY from what is written here):
+    {context}
 
-වැදගත්: ඔබේ සම්පූර්ණ පිළිතුර සිංහල භාෂාවෙන් විය යුතුය."""
+    QUESTION: {user_query}
+
+    Pay special attention to sections labelled "විශේෂ ලේඛන නීති" for special cases like age 50+ without birth certificate. Write a short factual answer in Sinhala prose sentences. No bullet points. No dashes. If the answer is not explicitly in the CONTEXT, write only: මට ඒ ගැන නිශ්චිත තොරතුරු නැත.
+
+    SINHALA ANSWER:"""
 
     messages.append({
         "role": "user",
-        "content": user_message_content
+        "content": user_content
     })
 
     return messages
 
 
 def build_greeting() -> str:
-    """Returns the chatbot's initial greeting in Sinhala."""
-    return """ආයුබෝවන්! මම Masepi — ශ්‍රී ලංකා රජයේ ලේඛන සේවා සහකාරයා.
+    return """<h3 style="margin-bottom: 2px;"><b>ආයුබෝවන්! මම MaSePi.</b> 🙏</h3>
+<p style="color: #555; font-size: 16px; margin-top: 0px; margin-bottom: 15px; font-style: italic;">"මහජන සේවය පිණිසයි"</p>
 
-මට ඔබට මෙම කරුණු ගැන සිංහලෙන් සහය දිය හැකිය:
-📋 ජාතික හැඳුනුම්පත (NIC)
-✈️ ගමන් බලපත්‍රය (Passport)  
-🚗 රියදුරු බලපත්‍රය (Driving License)
+රජයේ සේවාවන් ලබාගැනීමේදී ඔබට අවශ්‍ය නිවැරදි මඟ පෙන්වීම ඉතා පහසුවෙන් ලබා දීම මගේ අරමුණයි.<br><br>
+
+පහත සඳහන් සේවාවන් සඳහා ඔබට අවශ්‍ය තොරතුරු මාගෙන් අසන්න:<br>
+
+<div style="font-size: 19px; font-weight: 600; line-height: 1.8; margin-top: 10px; margin-bottom: 15px; padding-left: 15px; border-left: 3px solid #1a5276;">
+📋 ජාතික හැඳුනුම්පත (NIC)<br>
+✈️ ගමන් බලපත්‍රය (Passport)<br>
+🚗 රියදුරු බලපත්‍රය (Driving License)<br>
 📜 උප්පැන්න සහතිකය (Birth Certificate)
+</div>
 
-ඔබේ ප්‍රශ්නය සිංහලෙන් ඇසීමට ආරාධනා කරමි! 🙏"""
+ඔබට අද දැනගැනීමට අවශ්‍ය කුමක්ද? ඔබේ ප්‍රශ්නය සිංහලෙන් ඇසීමට ආරාධනා කරමි! 😊"""

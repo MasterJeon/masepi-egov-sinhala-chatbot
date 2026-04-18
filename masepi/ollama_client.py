@@ -1,59 +1,43 @@
 # ollama_client.py
-# -------------------------------------------------------
-# PURPOSE: All communication with the local Ollama server.
-#
-# KEY CONCEPT: Ollama runs as a local HTTP server on your
-# machine (port 11434). We call it using Python's `requests`
-# library — same as calling any REST API, but it's all LOCAL.
-# No data ever leaves your machine. That's what makes this
-# truly offline.
-# -------------------------------------------------------
+# Handles all communication with the local Ollama server.
+# Ollama runs as a local HTTP server on port 11434.
+# No data ever leaves the machine — fully offline.
 
 import requests
-import json
 
-# Ollama server address — always localhost for offline use
 OLLAMA_BASE_URL = "http://localhost:11434"
-
-# Model priority: try llama3.1 first, fall back to mistral
-PRIMARY_MODEL = "llama3.1"
-FALLBACK_MODEL = "mistral"
-
-# Request timeout in seconds — important for UX
-# If Ollama takes too long, we don't want the UI to freeze
-TIMEOUT_SECONDS = 120
+PRIMARY_MODEL   = "llama3.1"
+FALLBACK_MODEL  = "mistral"
+TIMEOUT_SECONDS = 180  # 3 minutes — large models can be slow on first run
 
 
 def check_ollama_running() -> bool:
     """
-    Ping Ollama to check if it's online.
-    Call this at app startup to give a clear error message
-    rather than letting the app crash mysteriously later.
+    Ping Ollama. Returns True if reachable, False for ANY error.
+    FIX: Now catches ALL exceptions (ConnectionError, ReadTimeout, etc.)
+    The original code only caught ConnectionError — ReadTimeout caused crashes.
     """
     try:
         response = requests.get(
             f"{OLLAMA_BASE_URL}/api/tags",
-            timeout=5
+            timeout=30  # 30s — Windows can be slow to respond
         )
         return response.status_code == 200
-    except requests.exceptions.ConnectionError:
+    except Exception:
+        # Catches ConnectionError, ReadTimeout, JSONDecodeError — everything
         return False
 
 
 def get_available_models() -> list:
-    """
-    Fetch the list of models Ollama has downloaded locally.
-    Useful for checking which models are available before
-    attempting inference.
-    """
+    """Returns list of locally installed model names."""
     try:
         response = requests.get(
             f"{OLLAMA_BASE_URL}/api/tags",
-            timeout=10
+            timeout=30
         )
         if response.status_code == 200:
             data = response.json()
-            return [model["name"] for model in data.get("models", [])]
+            return [m["name"] for m in data.get("models", [])]
     except Exception:
         pass
     return []
@@ -61,48 +45,25 @@ def get_available_models() -> list:
 
 def select_model() -> str:
     """
-    Pick the best available model.
-    Returns PRIMARY_MODEL if available, else FALLBACK_MODEL,
-    else the first available model.
-
-    WHY: We can't assume the user has pulled llama3.1.
-    This makes the app resilient.
+    Picks the best available model.
+    Prefers llama3.1, falls back to mistral, then whatever is installed.
     """
     available = get_available_models()
-
-    # Check for primary (check if model name starts with our target
-    # because Ollama appends ":latest" e.g. "llama3.1:latest")
-    for model in available:
-        if PRIMARY_MODEL in model:
-            return model
-
-    for model in available:
-        if FALLBACK_MODEL in model:
-            return model
-
-    # Last resort: use whatever is installed
+    for m in available:
+        if PRIMARY_MODEL in m:
+            return m
+    for m in available:
+        if FALLBACK_MODEL in m:
+            return m
     if available:
         return available[0]
-
-    # Nothing found — return primary and let Ollama give the error
     return PRIMARY_MODEL
 
 
 def generate_response(messages: list, model: str = None) -> str:
     """
-    Send a chat request to Ollama and get a response.
-
-    Args:
-        messages: List of {"role": ..., "content": ...} dicts
-                  (built by prompt_builder.py)
-        model: Which model to use (auto-selected if None)
-
-    Returns:
-        The model's response text (string)
-
-    IMPORTANT: We use /api/chat (not /api/generate).
-    /api/chat supports multi-turn conversation with history.
-    /api/generate is simpler but doesn't handle history well.
+    Sends chat messages to Ollama and returns the response text.
+    Uses /api/chat for proper multi-turn conversation support.
     """
     if model is None:
         model = select_model()
@@ -110,15 +71,12 @@ def generate_response(messages: list, model: str = None) -> str:
     payload = {
         "model": model,
         "messages": messages,
-        "stream": False,        # Get complete response at once
+        "stream": False,
         "options": {
-            "temperature": 0.3,  # Lower = more focused/consistent
-            # Why 0.3? For a government info chatbot, we want
-            # ACCURATE answers, not creative ones.
-            # Range: 0.0 (robotic) to 1.0 (creative/unpredictable)
-            "num_predict": 512,  # Max tokens to generate
-            # 512 is enough for most government service answers
-            # without wasting compute time
+            "temperature": 0.0,    # Zero creativity — facts only
+            "top_p": 1.0,
+            "num_predict": 400,
+            "repeat_penalty": 1.1  # Prevents repetition (fixes Q4-style bug)
         }
     }
 
@@ -128,60 +86,37 @@ def generate_response(messages: list, model: str = None) -> str:
             json=payload,
             timeout=TIMEOUT_SECONDS
         )
-
         if response.status_code == 200:
-            data = response.json()
-            # Extract the text from Ollama's response structure
-            return data["message"]["content"].strip()
-
+            return response.json()["message"]["content"].strip()
         else:
-            error_text = response.text[:200]  # Truncate long errors
-            return f"දෝෂයක් ඇති විය (Error {response.status_code}): {error_text}"
+            return f"දෝෂයක් ඇති විය (Error {response.status_code})"
 
     except requests.exceptions.ConnectionError:
-        return ("Ollama සේවාදායකය සම්බන්ධ කර ගත නොහැක. "
-                "කරුණාකර 'ollama serve' ධාවනය කර ඇති බව පරීක්ෂා කරන්න.")
-
+        return "Ollama සේවාදායකය සම්බන්ධ කර ගත නොහැක. 'ollama serve' ධාවනය කරන්න."
     except requests.exceptions.Timeout:
-        return ("ප්‍රතිචාරය ලබා ගැනීමට කාලය ඉකුත් විය. "
-                "ආදර්ශය (model) ධාවනය වෙමින් තිබිය හැකිය. "
-                "කරුණාකර නැවත උත්සාහ කරන්න.")
-
+        return "ප්‍රතිචාරය ලබා ගැනීමට කාලය ඉකුත් විය. නැවත උත්සාහ කරන්න."
     except Exception as e:
         return f"අනපේක්ෂිත දෝෂයක්: {str(e)}"
 
 
-def generate_with_fallback(messages: list) -> tuple[str, str]:
+def generate_with_fallback(messages: list) -> tuple:
     """
-    Try the primary model first, fall back to secondary on failure.
-
-    Returns:
-        (response_text, model_used)
-    
-    This gives the UI info about which model was used,
-    which you can display for transparency.
+    Tries primary model first, falls back to mistral.
+    Returns (response_text, model_name_used).
     """
-    primary = None
-    fallback = None
-
     available = get_available_models()
-    for m in available:
-        if PRIMARY_MODEL in m and primary is None:
-            primary = m
-        if FALLBACK_MODEL in m and fallback is None:
-            fallback = m
+    primary  = next((m for m in available if PRIMARY_MODEL  in m), None)
+    fallback = next((m for m in available if FALLBACK_MODEL in m), None)
 
-    # Try primary model
+    error_prefixes = ("දෝෂයක්", "Ollama", "ප්‍රතිචාරය", "අනපේක්ෂිත")
+
     if primary:
         result = generate_response(messages, model=primary)
-        if not result.startswith("දෝෂයක්") and not result.startswith("Ollama"):
+        if not any(result.startswith(p) for p in error_prefixes):
             return result, primary
 
-    # Fall back to secondary
     if fallback:
         result = generate_response(messages, model=fallback)
         return result, fallback
 
-    # Nothing worked
-    return ("ස්ථාපිත ආදර්ශ කිසිවක් සොයා ගත නොහැක. "
-            "'ollama pull llama3.1' ධාවනය කරන්න."), "none"
+    return "ස්ථාපිත ආදර්ශ කිසිවක් සොයා ගත නොහැක. 'ollama pull llama3.1' ධාවනය කරන්න.", "none"
